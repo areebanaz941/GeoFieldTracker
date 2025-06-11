@@ -1,0 +1,598 @@
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { 
+  getFieldUsers, 
+  getAllTasks, 
+  getAllTeams, 
+  getTeamMembers, 
+  createTeam, 
+  updateTeamStatus, 
+  assignUserToTeam 
+} from "@/lib/api";
+import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription } from "@/components/ui/card";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { useToast } from "@/hooks/use-toast";
+import useAuth from "@/hooks/useAuth";
+import { User, Task, Team, InsertTeam } from "@shared/schema";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Textarea } from "@/components/ui/textarea";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
+import { zodResolver } from "@hookform/resolvers/zod";
+
+function getInitials(name: string) {
+  return name
+    .split(" ")
+    .map((n) => n[0])
+    .join("")
+    .toUpperCase();
+}
+
+function getActiveStatus(lastActive: Date | null | undefined) {
+  if (!lastActive) return "Offline";
+  
+  const now = new Date();
+  const lastActiveTime = new Date(lastActive);
+  const diffMs = now.getTime() - lastActiveTime.getTime();
+  const diffMinutes = Math.floor(diffMs / 1000 / 60);
+  
+  if (diffMinutes < 5) return "Active";
+  if (diffMinutes < 30) return "Recently active";
+  if (diffMinutes < 60) return "Away";
+  return "Offline";
+}
+
+// TeamCard component for displaying team information
+interface TeamCardProps {
+  team: Team;
+  fieldUsers: User[];
+  handleTeamStatusChange: (teamId: number, status: string) => void;
+}
+
+function TeamCard({ team, fieldUsers, handleTeamStatusChange }: TeamCardProps) {
+  // Find members of this team
+  const teamMembers = fieldUsers.filter(user => user.teamId === team.id);
+  
+  return (
+    <Card key={team.id} className="overflow-hidden">
+      <CardHeader className="pb-2">
+        <div className="flex justify-between items-start">
+          <CardTitle>{team.name}</CardTitle>
+          <Badge
+            className={`
+              ${team.status === "Approved" ? "bg-green-100 text-green-700 border-green-200" : ""}
+              ${team.status === "Pending" ? "bg-yellow-100 text-yellow-700 border-yellow-200" : ""}
+              ${team.status === "Rejected" ? "bg-red-100 text-red-700 border-red-200" : ""}
+            `}
+          >
+            {team.status}
+          </Badge>
+        </div>
+        <CardDescription className="mt-2">
+          {team.description || "No description provided"}
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-2">
+          <div className="text-sm">
+            <span className="font-medium">Created:</span>{" "}
+            {new Date(team.createdAt).toLocaleDateString()}
+          </div>
+          <div className="text-sm">
+            <span className="font-medium">Members:</span>{" "}
+            {teamMembers.length}
+          </div>
+        </div>
+        
+        {teamMembers.length > 0 && (
+          <div className="mt-4">
+            <h4 className="text-xs font-medium uppercase text-gray-500 mb-2">Team Members</h4>
+            <div className="space-y-2">
+              {teamMembers.slice(0, 3).map((member) => (
+                <div key={member.id} className="flex items-center gap-2">
+                  <Avatar className="h-6 w-6 bg-primary-100 text-primary-600">
+                    <AvatarFallback className="text-xs">{getInitials(member.name)}</AvatarFallback>
+                  </Avatar>
+                  <span className="text-sm">{member.name}</span>
+                </div>
+              ))}
+              {teamMembers.length > 3 && (
+                <div className="text-xs text-gray-500">
+                  +{teamMembers.length - 3} more members
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </CardContent>
+      <CardFooter className="bg-gray-50 flex justify-end gap-2 pt-2">
+        {team.status === "Pending" && (
+          <>
+            <Button 
+              size="sm" 
+              variant="outline" 
+              className="border-red-500 text-red-500 hover:bg-red-50"
+              onClick={() => handleTeamStatusChange(team.id, "Rejected")}
+            >
+              Reject
+            </Button>
+            <Button 
+              size="sm" 
+              variant="outline" 
+              className="border-green-500 text-green-500 hover:bg-green-50"
+              onClick={() => handleTeamStatusChange(team.id, "Approved")}
+            >
+              Approve
+            </Button>
+          </>
+        )}
+        {team.status === "Rejected" && (
+          <Button 
+            size="sm" 
+            variant="outline" 
+            className="border-green-500 text-green-500 hover:bg-green-50"
+            onClick={() => handleTeamStatusChange(team.id, "Approved")}
+          >
+            Approve
+          </Button>
+        )}
+        {team.status === "Approved" && (
+          <Button 
+            size="sm" 
+            variant="outline" 
+            className="border-red-500 text-red-500 hover:bg-red-50"
+            onClick={() => handleTeamStatusChange(team.id, "Rejected")}
+          >
+            Deactivate
+          </Button>
+        )}
+      </CardFooter>
+    </Card>
+  );
+}
+
+// Form schema for creating a new team
+const teamFormSchema = z.object({
+  name: z.string().min(3, { message: "Team name must be at least 3 characters" }),
+  description: z.string().optional(),
+});
+
+export default function FieldTeams() {
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [searchTerm, setSearchTerm] = useState("");
+  const [createTeamOpen, setCreateTeamOpen] = useState(false);
+  const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
+  
+  // Create a form for team creation
+  const form = useForm<z.infer<typeof teamFormSchema>>({
+    resolver: zodResolver(teamFormSchema),
+    defaultValues: {
+      name: "",
+      description: "",
+    },
+  });
+  
+  // Query for field users
+  const { data: fieldUsers = [] } = useQuery({
+    queryKey: ["/api/users/field"],
+    queryFn: getFieldUsers,
+  });
+  
+  // Query for tasks
+  const { data: tasks = [] } = useQuery({
+    queryKey: ["/api/tasks"],
+    queryFn: getAllTasks,
+  });
+  
+  // Query for teams
+  const { data: teams = [] } = useQuery({
+    queryKey: ["/api/teams"],
+    queryFn: getAllTeams,
+  });
+  
+  // Mutation for creating a new team
+  const createTeamMutation = useMutation({
+    mutationFn: createTeam,
+    onSuccess: () => {
+      toast({
+        title: "Team created successfully",
+        description: user?.role === "Supervisor" 
+          ? "The team is now available for field team members to join" 
+          : "The team request has been submitted for approval",
+      });
+      setCreateTeamOpen(false);
+      form.reset();
+      queryClient.invalidateQueries({ queryKey: ["/api/teams"] });
+    },
+    onError: (error) => {
+      toast({
+        title: "Failed to create team",
+        description: "An error occurred while creating the team",
+        variant: "destructive",
+      });
+    }
+  });
+  
+  // Mutation for updating team status
+  const updateTeamStatusMutation = useMutation({
+    mutationFn: ({ teamId, status }: { teamId: number, status: string }) => 
+      updateTeamStatus(teamId, status),
+    onSuccess: () => {
+      toast({
+        title: "Team status updated",
+        description: "The team status has been updated successfully",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/teams"] });
+    },
+    onError: (error) => {
+      toast({
+        title: "Failed to update team status",
+        description: "An error occurred while updating the team status",
+        variant: "destructive",
+      });
+    }
+  });
+  
+  // Mutation for assigning user to team
+  const assignUserToTeamMutation = useMutation({
+    mutationFn: ({ userId, teamId }: { userId: number, teamId: number }) => 
+      assignUserToTeam(userId, teamId),
+    onSuccess: () => {
+      toast({
+        title: "User assigned to team",
+        description: "The user has been assigned to the team successfully",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/users/field"] });
+    },
+    onError: (error) => {
+      toast({
+        title: "Failed to assign user to team",
+        description: "An error occurred while assigning the user to the team",
+        variant: "destructive",
+      });
+    }
+  });
+  
+  // Filter users based on search
+  const filteredUsers = fieldUsers.filter((user: User) =>
+    user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    user.username.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+  
+  // Get tasks assigned to each user
+  const getUserTasks = (userId: number) => {
+    return tasks.filter((task: Task) => task.assignedTo === userId);
+  };
+  
+  // Calculate completion rate for each user
+  const getUserCompletionRate = (userId: number) => {
+    const userTasks = getUserTasks(userId);
+    if (userTasks.length === 0) return 0;
+    
+    const completedTasks = userTasks.filter((task: Task) => task.status === "Completed");
+    return Math.round((completedTasks.length / userTasks.length) * 100);
+  };
+  
+  // Get team details for a user
+  const getUserTeam = (userId: number) => {
+    const user = fieldUsers.find((u: User) => u.id === userId);
+    if (!user?.teamId) return null;
+    return teams.find((team: Team) => team.id === user.teamId) || null;
+  };
+  
+  // Handle team creation form submission
+  const onSubmit = async (values: z.infer<typeof teamFormSchema>) => {
+    createTeamMutation.mutate(values as InsertTeam);
+  };
+  
+  // Handle team status changes
+  const handleTeamStatusChange = (teamId: number, status: string) => {
+    updateTeamStatusMutation.mutate({ teamId, status });
+  };
+  
+  // Is the current user a supervisor
+  const isSupervisor = user?.role === "Supervisor";
+  
+  return (
+    <div className="flex-1 overflow-y-auto p-6 bg-gray-50">
+      <div className="container mx-auto max-w-6xl">
+        <Tabs defaultValue="members" className="w-full">
+          <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+            <div>
+              <h1 className="text-2xl font-bold">Field Teams</h1>
+              <p className="text-sm text-gray-500 mt-1">Manage your field teams and members</p>
+            </div>
+            <div className="flex gap-2">
+              <TabsList>
+                <TabsTrigger value="members">Team Members</TabsTrigger>
+                <TabsTrigger value="teams">Team Management</TabsTrigger>
+              </TabsList>
+              {user?.role === "Supervisor" && (
+                <Dialog open={createTeamOpen} onOpenChange={setCreateTeamOpen}>
+                  <DialogTrigger asChild>
+                    <Button className="bg-green-600 hover:bg-green-700">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2">
+                        <path d="M12 5v14M5 12h14" />
+                      </svg>
+                      Create Team
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Create New Field Team</DialogTitle>
+                      <DialogDescription>
+                        Fill out the details below to create a new field team. Teams created by supervisors are automatically approved.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <Form {...form}>
+                      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                        <FormField
+                          control={form.control}
+                          name="name"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Team Name</FormLabel>
+                              <FormControl>
+                                <Input placeholder="Enter team name" {...field} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="description"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Description</FormLabel>
+                              <FormControl>
+                                <Textarea 
+                                  placeholder="Enter team description" 
+                                  className="resize-none" 
+                                  rows={3}
+                                  {...field} 
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <DialogFooter>
+                          <Button 
+                            type="button" 
+                            variant="outline" 
+                            onClick={() => setCreateTeamOpen(false)}
+                          >
+                            Cancel
+                          </Button>
+                          <Button 
+                            type="submit"
+                            disabled={createTeamMutation.isPending}
+                          >
+                            {createTeamMutation.isPending ? "Creating..." : "Create Team"}
+                          </Button>
+                        </DialogFooter>
+                      </form>
+                    </Form>
+                  </DialogContent>
+                </Dialog>
+              )}
+            </div>
+          </div>
+            
+          <div className="mb-4">
+            <Input
+              placeholder="Search team members or teams..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full max-w-xs"
+            />
+          </div>
+            
+          <TabsContent value="members" className="mt-0">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredUsers.length > 0 ? (
+                filteredUsers.map((fieldUser: User) => {
+                  const userTasks = getUserTasks(fieldUser.id);
+                  const completionRate = getUserCompletionRate(fieldUser.id);
+                  const activeStatus = getActiveStatus(fieldUser.lastActive);
+                  const userTeam = getUserTeam(fieldUser.id);
+                  
+                  return (
+                    <Card key={fieldUser.id} className="overflow-hidden">
+                      <CardContent className="p-0">
+                        <div className="p-5">
+                          <div className="flex items-start justify-between">
+                            <div className="flex items-center space-x-4">
+                              <Avatar className="h-12 w-12 border-2 border-white bg-primary-100 text-primary-600">
+                                <AvatarFallback>{getInitials(fieldUser.name)}</AvatarFallback>
+                              </Avatar>
+                              <div>
+                                <h3 className="font-medium">{fieldUser.name}</h3>
+                                <p className="text-sm text-gray-500">{fieldUser.email}</p>
+                                {userTeam && (
+                                  <Badge className="mt-1 bg-green-100 text-green-700 hover:bg-green-200 border-green-200">
+                                    {userTeam.name}
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+                            <Badge
+                              variant="outline"
+                              className={`
+                                ${activeStatus === "Active" ? "bg-green-100 text-green-700 border-green-200" : ""}
+                                ${activeStatus === "Recently active" ? "bg-blue-100 text-blue-700 border-blue-200" : ""}
+                                ${activeStatus === "Away" ? "bg-yellow-100 text-yellow-700 border-yellow-200" : ""}
+                                ${activeStatus === "Offline" ? "bg-gray-100 text-gray-700 border-gray-200" : ""}
+                              `}
+                            >
+                              {activeStatus}
+                            </Badge>
+                          </div>
+                          
+                          <div className="mt-4 grid grid-cols-2 gap-2 text-sm text-gray-500">
+                            <div className="space-y-1">
+                              <p>Assigned Tasks</p>
+                              <p className="text-lg font-semibold text-gray-900">{userTasks.length}</p>
+                            </div>
+                            <div className="space-y-1">
+                              <p>Completion Rate</p>
+                              <p className="text-lg font-semibold text-gray-900">{completionRate}%</p>
+                            </div>
+                          </div>
+                          
+                          <div className="mt-4">
+                            <h4 className="text-xs font-medium uppercase text-gray-500 mb-2">Task Status</h4>
+                            <div className="space-y-1">
+                              <div className="flex justify-between items-center text-xs">
+                                <span>Completed</span>
+                                <span>{userTasks.filter((t: Task) => t.status === "Completed").length}</span>
+                              </div>
+                              <div className="flex justify-between items-center text-xs">
+                                <span>In Progress</span>
+                                <span>{userTasks.filter((t: Task) => t.status === "In Progress").length}</span>
+                              </div>
+                              <div className="flex justify-between items-center text-xs">
+                                <span>Assigned</span>
+                                <span>{userTasks.filter((t: Task) => t.status === "Assigned").length}</span>
+                              </div>
+                            </div>
+                          </div>
+                          
+                          {fieldUser.lastActive && (
+                            <div className="mt-4 text-xs text-gray-500">
+                              Last active: {new Date(fieldUser.lastActive).toLocaleString()}
+                            </div>
+                          )}
+                        </div>
+                        
+                        <div className="bg-gray-50 px-5 py-3 flex justify-between border-t">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              toast({
+                                title: "View on map",
+                                description: "This feature will navigate to map view centered on this team member",
+                              });
+                            }}
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 mr-2">
+                              <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                              <circle cx="12" cy="10" r="3"></circle>
+                            </svg>
+                            Locate
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              toast({
+                                title: "View tasks",
+                                description: "This feature will show all tasks assigned to this team member",
+                              });
+                            }}
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 mr-2">
+                              <path d="M3 5v14"></path>
+                              <path d="M12 5v14"></path>
+                              <path d="M7 7l0 0"></path>
+                              <path d="M7 11l0 0"></path>
+                              <path d="M16 7l0 0"></path>
+                              <path d="M16 11l0 0"></path>
+                              <path d="M16 15l0 0"></path>
+                            </svg>
+                            Tasks
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })
+              ) : (
+                <div className="col-span-full text-center py-8 text-gray-500">
+                  {searchTerm
+                    ? "No team members match your search criteria"
+                    : "No field team members found"}
+                </div>
+              )}
+            </div>
+          </TabsContent>
+            
+          <TabsContent value="teams" className="mt-0">
+            {/* Show a notice for field users that they can only see their own team */}
+            {!isSupervisor && (
+              <div className="mb-4 bg-blue-50 border border-blue-200 rounded-md p-4 text-blue-800">
+                <p className="text-sm font-medium flex items-center">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="8" x2="12" y2="12"></line>
+                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                  </svg>
+                  As a field team member, you can only view information about your own team
+                </p>
+              </div>
+            )}
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {teams.length > 0 ? (
+                teams
+                  // Filter teams based on user role:
+                  // - Supervisors can see all teams
+                  // - Field users can only see their own team
+                  .filter(team => 
+                    isSupervisor ? true : (user?.teamId === team.id)
+                  )
+                  // Apply text search filtering
+                  .filter(team => 
+                    searchTerm === "" || 
+                    team.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                    (team.description || "").toLowerCase().includes(searchTerm.toLowerCase())
+                  )
+                  .map((team: Team) => (
+                    <TeamCard 
+                      key={team.id} 
+                      team={team} 
+                      fieldUsers={fieldUsers} 
+                      handleTeamStatusChange={handleTeamStatusChange} 
+                    />
+                  ))
+              ) : (
+                <div className="col-span-full text-center py-8 text-gray-500">
+                  {searchTerm
+                    ? "No teams match your search criteria"
+                    : isSupervisor 
+                      ? "No teams created yet. Create your first team using the button above"
+                      : "No teams available"
+                  }
+                </div>
+              )}
+              
+              {/* No teams found after filtering */}
+              {teams.length > 0 && 
+               teams.filter(team => isSupervisor ? true : (user?.teamId === team.id))
+                 .filter(team => 
+                   searchTerm === "" || 
+                   team.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                   (team.description || "").toLowerCase().includes(searchTerm.toLowerCase())
+                 ).length === 0 && (
+                <div className="col-span-full text-center py-8 text-gray-500">
+                  {isSupervisor
+                    ? "No teams match your search criteria"
+                    : "You are not currently assigned to a team"}
+                </div>
+              )}
+            </div>
+          </TabsContent>
+        </Tabs>
+      </div>
+    </div>
+  );
+}

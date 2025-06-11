@@ -1,0 +1,127 @@
+Project Overview 
+GeoWhats MVP will provide a streamlined workflow for field operations management: 
+1. Supervisors can view team locations on a map 
+2. Supervisors can assign tasks to teams by selecting them on the map 
+3. Field teams receive task notifications and can view assigned locations 
+4. Field teams can update task status and upload image evidence of completion 
+5. All users access the system through responsive web interfaces 
+ 
+Scope of Work 
+Supervisor Dashboard 
+• User Authentication  
+o Secure login system for supervisors 
+o Password recovery functionality 
+• Map Interface  
+o Interactive OpenStreetMap integration 
+o Visual display of field team locations 
+o Click-to-select team members on map 
+• Task Management  
+o Create new tasks with title and description 
+o Set task due dates 
+o Auto-capture location data from map selection 
+o View task status updates and completion evidence 
+Field Team Dashboard 
+• User Authentication  
+o Secure login system for field team members 
+o Mobile-optimized login experience 
+• Task Management  
+o List view of all assigned tasks 
+o Map view showing task locations 
+o Task detail view with description and requirements 
+o Status update functionality (Assigned, In Progress, Completed) 
+• Evidence Submission  
+o Image upload capability for task completion evidence 
+o Basic image preview functionality 
+ 
+ 
+ 
+Technical Specifications 
+• Platform: Web-based responsive application 
+• Map Integration: (open-source) 
+• Database: Simple database structure for users, tasks, locations, and images 
+• User Roles: Supervisor and Field Team 
+• Accessibility: Mobile and desktop compatible 
+• Hosting: Client-provided hosting environment 
+ 
+Client Responsibilities 
+• Provide complete registration information for all team members and supervisors 
+• Supply any required media assets (logos, images, etc.) 
+• Provide hosting environment for the application 
+• Test the application during development and provide timely feedback 
+• Train end-users on system functionality 
+ 
+Project Timeline 
+Phase Description Duration 
+Planning & Setup Requirement confirmation, project setup 1 day 
+Development Dashboard creation, map integration, task management 5 days 
+Testing Internal testing and bug fixes 1 day 
+Client Review Client testing and feedback 1 day 
+Final Revisions Address client feedback 1 day 
+Deployment Launch application to production environment 1 day 
+Total Estimated Timeline: 10 days (2 weeks) 
+ 
+Investment 
+Total MVP Development: $700 
+Payment Schedule: 
+• 50% ($350) due upon project commencement 
+• 50% ($350) due upon project completion and delivery 
+  
+Minimum-Features: 
+Feature : point → Tower & Manhole ( label for Tower is Tower No and MH is MH number ) 
+Feature: Polyline → Fiber Cable ( label is Fiber length + Fiber Type) 
+Feature: Polygon → Parcel ( Parcel Type could commercial or Residential  - Label Parcel No ) 
+ 
+Boundary Status: 
+Boundary Status: Unassigned , Assigned , Completed , In-Complete , Submit-Review, 
+Review_Accepted, Review_Reject,Review_inprogress 
+Colors will change according to status 
+ 
+Icon Display: Please see the figure to display icon with fea_no 
+ 
+Minimum-Attributes: 
+ 
+ID1 ( primary key) for feature separately  ( from DB sequence ) 
+Name: varchar field 
+Fea_No : number assigned to each feature  ( varChar field) 
+Fea_State : Plan, Under Construction, As-Built, Abandoned 
+Fea_status: New , InProgress, Completed, In-Completed, Submit-Review, Active 
+Maintenance : ( either Required / None) 
+Maintenance Date: 
+Fea_Type :  ( Tower : Mobillink / Ptcl  MH: 2-way / 4-way   FiberCable: 10F / 24F Parcel: 
+Commerical/Residential 
+Last Date updated: 
+Remarks: 
+Colors will change according to status 
+ 
+Search by Filter: 
+Fea_status: New , InProgress, Completed, In-Completed, Submit-Review, Active 
+Placement workflow: 
+• User Can get the current location on the map and Add, Edit and delete feature according to 
+boundary he was assigned or as supervisor role no need to check for boundary status 
+• User can find the location on the map and then do the same as above. 
+Note: So during the selection of map location , it should remain the same place  
+ 
+One Dashboard report: 
+• Either by boundary report for the user performance for the assigned work 
+• Total Project report for completion of features – work status 
+Role: 
+• Supervisor can do CRUD for any feature on the map 
+• Field user can do CRUD for the assigned boundary ONLY 
+  
+Filter button on the map to filter the Data: 
+ 
+Include → Buttons Like InProgress, …… for fea_status  ( filter the data according to status)  
+Or 
+ALL ( to display all the data)  
+Or 
+Default view  ( when initially App runs – like default view that’s fits either according to the boundary 
+assigned or default view ) 
+ 
+Advance Search by: 
+*Field1: Feature  ( like MH, Fiber cable ..)  
+Field2: Feature No ( fea_no) 
+Field3: Feature Type 
+Field4: Fea_Status 
+Note: Button to execute shows the number of counts ( either on the button or ,,,, ) , once clicked 
+the map should reflect the result. 
+ 

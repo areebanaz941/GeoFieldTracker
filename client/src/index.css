@@ -1,0 +1,97 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --primary-color: #1E5CB3; /* Deep Blue */
+  --accent-color: #F9973E; /* Orange/Amber */
+  --text-on-light: #fff;
+  --secondary-color: #E0F7F6; /* Light Blue-Green */
+  --tertiary-color: #E74C3C; /* Red Accent */
+}
+
+body {
+  background-color: #f8fdf6;
+}
+
+.bg-primary-custom {
+  background-color: var(--primary-color);
+}
+
+.bg-secondary-custom {
+  background-color: var(--secondary-color);
+}
+
+.text-on-primary {
+  color: var(--text-on-light);
+}
+
+/* Mobile responsiveness improvements */
+@media (max-width: 640px) {
+  .responsive-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .responsive-padding {
+    padding: 1rem;
+  }
+  
+  .responsive-text {
+    font-size: 0.9rem;
+  }
+}
+
+:root {
+      --background: 0 0% 100%;
+--foreground: 20 14.3% 4.1%;
+--muted: 120 16% 93%;
+--muted-foreground: 25 5.3% 44.7%;
+--popover: 0 0% 100%;
+--popover-foreground: 20 14.3% 4.1%;
+--card: 0 0% 100%;
+--card-foreground: 20 14.3% 4.1%;
+--border: 215 75% 30% / 20%;
+--input: 215 75% 30% / 15%;
+--primary: 215 75% 41%; /* Deep Blue hue */
+--primary-foreground: 0 0% 100%;
+--secondary: 180 50% 93%;
+--secondary-foreground: 215 75% 30%;
+--accent: 30 94% 61%; /* Orange/Amber */
+--accent-foreground: 0 0% 100%;
+--destructive: 0 84.2% 60.2%;
+--destructive-foreground: 60 9.1% 97.8%;
+--ring: 147 36% 36%;
+--radius: 0.5rem;
+  }
+  .dark {
+      --background: 157 35% 10%;
+--foreground: 0 0% 98%;
+--muted: 157 35% 20%;
+--muted-foreground: 157 30% 70%;
+--popover: 157 35% 8%;
+--popover-foreground: 0 0% 98%;
+--card: 157 35% 12%;
+--card-foreground: 0 0% 98%;
+--border: 215 75% 30% / 30%;
+--input: 215 75% 30% / 25%;
+--primary: 215 75% 46%; /* Brighter Deep Blue for dark mode */
+--primary-foreground: 0 0% 100%;
+--secondary: 215 40% 25%;
+--secondary-foreground: 0 0% 98%;
+--accent: 30 94% 61%; /* Orange/Amber */
+--accent-foreground: 0 0% 100%;
+--destructive: 0 62.8% 40.6%;
+--destructive-foreground: 0 0% 98%;
+--ring: 147 36% 50%;
+--radius: 0.5rem;
+  }
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply font-sans antialiased bg-background text-foreground;
+  }
+}
