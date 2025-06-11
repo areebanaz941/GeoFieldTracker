@@ -242,7 +242,8 @@ function setupGracefulShutdown(server: any, storage: IStorage) {
 
     // Start the server
     const port = parseInt(process.env.PORT || "5000", 10);
-const host = process.env.HOST || "127.0.0.1"; // Use IPv4 explicitly instead of "localhost"
+const host = process.env.NODE_ENV === "production" ? "0.0.0.0" : "127.0.0.1";
+
 
 server.listen(port, host, () => {
   log(`🚀 GeoWhats server running on http://${host}:${port}`);
